@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Access Tracer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Tailscale-leaning palette: warm off-white, near-black ink, terracotta brand accent.
+         Terracotta is reserved for chrome/identity, never for body text (contrast). */
+      --bg: #f6f3ee;
+      --surface: #ffffff;
+      --border: #e4ded4;
+      --border-strong: #d2c9bc;
+      --ink: #17181a;
+      --muted: #5c564e;
+      --quiet: #938b7e;
+      --brand: #c15f49;
+      --brand-dark: #9a4a38;
+      --brand-soft: #faebe5;
+      --allow: #16774a;
+      --allow-bg: #eaf6ef;
+      --deny: #ad3121;
+      --deny-bg: #fbece9;
+      --shadow: 0 1px 2px rgba(23,24,26,0.04), 0 10px 24px rgba(23,24,26,0.05);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle, var(--border-strong) 1px, transparent 1.6px) 0 0 / 22px 22px,
+        var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 64px;
+    }
+
+    header.top {
+      display: grid;
+      gap: 14px;
+      margin-bottom: 18px;
+      animation: rise .4s ease both;
+    }
+    .brandrow {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      width: 34px; height: 34px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      place-items: center;
+      flex: none;
+    }
+    .logo span {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--ink);
+    }
+    .logo span:nth-child(1) { background: var(--brand); width: 7px; height: 7px; }
+    .brand h1 {
+      margin: 0;
+      font-family: "Inter", sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      padding: 7px 11px;
+      border-radius: 999px;
+      text-decoration: none;
+      transition: border-color .15s, color .15s;
+    }
+    .badge:hover, .badge:focus-visible {
+      border-color: var(--brand);
+      color: var(--brand-dark);
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 720px) { .compare { grid-template-columns: 1fr; } }
+    .compare article {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+    }
+    .compare .label {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--quiet);
+      font-weight: 600;
+    }
+    .compare h2 {
+      margin: 6px 0 0;
+      font-size: 0.98rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .compare p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    .compare .now { border-left: 3px solid var(--border-strong); }
+    .compare .next { border-left: 3px solid var(--brand); }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 960px) { .workspace { grid-template-columns: 1fr; } }
+
+    .workspace > aside.panel {
+      position: sticky;
+      top: 14px;
+      max-height: calc(100vh - 28px);
+      display: flex;
+      flex-direction: column;
+    }
+    .workspace > aside.panel .panel-b { overflow-y: auto; }
+    @media (max-width: 960px) {
+      .workspace > aside.panel { position: static; max-height: none; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: rise .45s ease both;
+    }
+    .panel-h {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-h h3 {
+      margin: 0;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .panel-h span {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      color: var(--quiet);
+    }
+    .panel-b { padding: 12px; flex: 1 1 auto; min-height: 0; }
+
+    .run:focus-visible, .badge:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+    }
+
+    .run {
+      flex: 1;
+      border: 0;
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      background: var(--ink);
+      color: #fff;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.92rem;
+      cursor: pointer;
+      transition: background .12s;
+    }
+    .run:hover { background: #000; }
+
+    .verdict {
+      padding: 20px 20px 6px;
+      min-height: 140px;
+      border-bottom: 4px solid var(--border);
+    }
+    .verdict.allow { border-bottom-color: var(--allow); background: var(--allow-bg); }
+    .verdict.deny { border-bottom-color: var(--deny); background: var(--deny-bg); }
+    .status {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--quiet);
+    }
+    .verdict.allow .status { color: var(--allow); }
+    .verdict.deny .status { color: var(--deny); }
+    .big {
+      margin: 8px 0 0;
+      font-family: "Inter", sans-serif;
+      font-size: clamp(1.6rem, 3vw, 2.15rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    .pathline {
+      margin: 10px 0 0;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: inline-block;
+      padding: 7px 10px;
+      border-radius: 999px;
+    }
+    .blurb {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      max-width: 54ch;
+    }
+
+    .trace-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 12px;
+      padding: 12px;
+    }
+    @media (max-width: 900px) { .trace-grid { grid-template-columns: 1fr; } }
+
+    .steps { display: grid; gap: 8px; }
+    .step {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 13px;
+      background: var(--surface);
+      opacity: 0;
+      transform: translateY(6px);
+      animation: stepIn .3s ease forwards;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .step, header.top, .panel { animation: none; opacity: 1; transform: none; }
+    }
+    .step.hit { border-color: var(--allow); background: var(--allow-bg); }
+    .step.miss { border-color: var(--border); }
+    .step.near {
+      border-color: var(--brand);
+      background: var(--brand-soft);
+    }
+    .step .t {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--quiet);
+      font-weight: 600;
+    }
+    .step .body {
+      margin-top: 5px;
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+    .step pre {
+      margin: 8px 0 0;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+
+    .side-cards { display: grid; gap: 10px; align-content: start; }
+    .mini {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 13px 14px;
+      background: var(--surface);
+    }
+    .mini h4 {
+      margin: 0;
+      font-size: 0.76rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .mini p {
+      margin: 7px 0 0;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+
+    .policy-wrap { margin-top: 14px; }
+
+    .verify { margin-top: 14px; }
+    .verify-intro {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.55;
+      max-width: 74ch;
+    }
+    .verify-intro code { font-family: "IBM Plex Mono", monospace; font-size: 0.85em; color: var(--ink); }
+    .verify-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    @media (max-width: 720px) { .verify-grid { grid-template-columns: 1fr; } }
+    .verify-grid .mini code {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.85em;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .mini.highlight { border-color: var(--brand); background: var(--brand-soft); }
+    .verify-foot {
+      margin: 14px 0 0;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11.5px;
+      color: var(--quiet);
+    }
+    .verify-foot code {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .policy-wrap pre {
+      margin: 0;
+      padding: 16px 18px;
+      overflow: auto;
+      max-height: 240px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11.5px;
+      line-height: 1.45;
+      background: var(--ink);
+      color: #ece7df;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes stepIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .35; }
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .run.secondary {
+      flex: none;
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--border-strong);
+    }
+    .run.secondary:hover { background: var(--bg); }
+
+    .livedot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--allow);
+      display: inline-block;
+      margin-right: 6px;
+      animation: pulse 1.4s infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .livedot { animation: none; }
+    }
+
+    .feed { display: grid; gap: 8px; }
+    .feed-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border-strong);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      cursor: pointer;
+      color: inherit;
+      font-family: inherit;
+      opacity: 0;
+      transform: translateY(6px);
+      animation: stepIn .3s ease forwards;
+      transition: border-color .15s, background .15s;
+    }
+    .feed-item:hover { border-color: var(--border-strong); }
+    .feed-item:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    .feed-item.open { border-left-color: var(--allow); }
+    .feed-item.blocked { border-left-color: var(--deny); }
+    .feed-item.selected { background: var(--brand-soft); border-color: var(--brand); }
+    .feed-item .fline { font-size: 0.88rem; line-height: 1.42; color: var(--ink); font-weight: 600; }
+    .feed-item .fmeta {
+      margin-top: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10.5px;
+      color: var(--quiet);
+    }
+    .fbadge { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .feed-item.open .fbadge { color: var(--allow); }
+    .feed-item.blocked .fbadge { color: var(--deny); }
+    .feed-note {
+      margin: 2px 4px 10px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+    .feed-empty {
+      margin-top: 4px;
+      color: var(--quiet);
+      font-size: 0.85rem;
+      padding: 8px 4px 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div class="brandrow">
+        <div class="brand">
+          <div class="logo" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <div>
+            <h1>Access Tracer</h1>
+            <p>Watches the tailnet. Traces every new path on its own, the moment it's requested.</p>
+          </div>
+        </div>
+        <a
+          class="badge"
+          href="https://github.com/tailscale/tailscale/issues/11618"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Related request · #11618 ↗</a>
+      </div>
+
+      <div class="compare">
+        <article class="now">
+          <div class="label">Today</div>
+          <h2>Explain after someone already tried</h2>
+          <p>Session tools can show which rules were checked, but only once a connection has already succeeded or failed. Helpful for review, too late for the person stuck at the door.</p>
+        </article>
+        <article class="next">
+          <div class="label">Access Tracer</div>
+          <h2>Trace it automatically, as it happens</h2>
+          <p>No one has to ask. Every device that joins gets traced against the rulebook on its own, and a blockage lists itself, near misses included, before it turns into a ticket.</p>
+        </article>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="panel">
+        <div class="panel-h">
+          <h3>Tailnet activity</h3>
+          <span><span class="livedot" aria-hidden="true"></span><span id="watchState">watching</span></span>
+        </div>
+        <div class="controls">
+          <button class="run secondary" id="playBtn" aria-pressed="true">Pause</button>
+          <button class="run secondary" id="restartBtn">Restart</button>
+        </div>
+        <div class="panel-b">
+          <p class="feed-note">Devices join the tailnet on their own schedule below. Each one gets traced the moment it requests a path, no one has to click anything. Click any entry to pull up its full reasoning on the right.</p>
+          <div class="feed" id="feed" role="log" aria-label="Automatic path traces" aria-live="polite"></div>
+        </div>
+      </aside>
+
+      <section class="panel" style="animation-delay:.05s">
+        <div class="panel-h">
+          <h3>Decision path</h3>
+          <span id="clock">idle</span>
+        </div>
+        <div class="verdict" id="verdict">
+          <div class="status">ready</div>
+          <p class="big">Waiting for the first device to join.</p>
+          <p class="blurb">The difference is not another allow/deny light. It is the full walk through the rulebook, including rules that almost matched, generated the instant a path is requested.</p>
+        </div>
+        <div class="trace-grid">
+          <div class="steps" id="steps"></div>
+          <div class="side-cards" id="side"></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel policy-wrap">
+      <div class="panel-h">
+        <h3>Policy under test</h3>
+        <span>sample payments network</span>
+      </div>
+      <pre id="policyView"></pre>
+    </section>
+
+    <section class="panel verify">
+      <div class="panel-h">
+        <h3>Verified against my own tailnet</h3>
+        <span>real API, not a mock</span>
+      </div>
+      <div class="panel-b verify-b">
+        <p class="verify-intro">
+          The payments network above is a teaching sample. I wrote its matching logic by hand, and it is a simplified approximation of Tailscale's real policy engine, not a reimplementation of it. To ground this in something real, I called Tailscale's actual API against my own tailnet the night before this call: <code>GET /acl</code>, <code>GET /devices</code>, <code>POST /acl/preview</code>, and <code>POST /acl/validate</code>.
+        </p>
+        <div class="verify-grid">
+          <div class="mini">
+            <h4>GET /tailnet/-/devices</h4>
+            <p>1 device: <code>macbook-pro</code>, macOS, authorized. A brand-new tailnet, nothing custom yet.</p>
+          </div>
+          <div class="mini">
+            <h4>GET /tailnet/-/acl</h4>
+            <p>The stock default policy: one grant, <code>{"src":["*"],"dst":["*"],"ip":["*"]}</code>, allow everything. No custom groups, tags, or tests.</p>
+          </div>
+          <div class="mini">
+            <h4>POST /acl/preview?type=user</h4>
+            <p>Asked the real server which rule applies to my own account. It answered: <code>lineNumber 1</code>, the default allow-all grant. One real call, one real, server-computed answer.</p>
+          </div>
+          <div class="mini highlight">
+            <h4>POST /acl/validate</h4>
+            <p><strong>0 tests defined</strong>, so the real endpoint had nothing to check. This is the actual gap: <code>acl/validate</code> only grades tests you already wrote by hand. It can't answer an arbitrary "can X reach Y" question on its own, and most policies, including this fresh one, don't have any tests at all. That's exactly the question Access Tracer answers automatically instead.</p>
+          </div>
+        </div>
+        <p class="verify-foot">Script, request shapes, and raw (locally gitignored) responses: <code>scripts/tailscale-fetch.mjs</code> in this repo.</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const sources = [
+      { id: "fraud-eng", name: "Fraud engineer", meta: "Needs dashboards and read paths. Not a shell on the database.", src: "group:fraud-eng" },
+      { id: "contractor", name: "Vendor contractor", meta: "Short-term help. Staging only.", src: "group:contractors" },
+      { id: "breakglass", name: "On-call break-glass", meta: "Rare emergency access. Should be loud and rare.", src: "group:breakglass" },
+      { id: "laptop", name: "Your MacBook", meta: "Same idea as macbook-pro in your real console.", src: "you@tailnet" },
+    ];
+    const destinations = [
+      { id: "fraud-dash", name: "fraud-dashboard", meta: "Internal fraud decisions surface.", dst: "tag:fraud-dashboard" },
+      { id: "pay-api", name: "payments-api", meta: "Sensitive payment processing service.", dst: "tag:payments-api" },
+      { id: "pay-db", name: "payments-db", meta: "Database. Almost nobody should open a shell here.", dst: "tag:payments-db" },
+      { id: "staging", name: "staging-web", meta: "Non-production site for helpers.", dst: "tag:staging-web" },
+      { id: "macbook", name: "macbook-pro", meta: "Your laptop on the private network.", dst: "macbook-pro" },
+    ];
+    const actions = [
+      { id: "https", name: "Open in browser", meta: "tcp/443", port: "tcp:443" },
+      { id: "ssh", name: "Open secure shell", meta: "terminal door into the machine", port: "ssh" },
+      { id: "db", name: "Database port", meta: "tcp/5432", port: "tcp:5432" },
+    ];
+
+    const grants = [
+      { id: "g1", src: ["group:fraud-eng"], dst: ["tag:fraud-dashboard", "tag:staging-web"], ip: ["tcp:443"], note: "Fraud engineers can open dashboards and staging in the browser." },
+      { id: "g2", src: ["group:contractors"], dst: ["tag:staging-web"], ip: ["tcp:443"], note: "Contractors only get staging in the browser." },
+      { id: "g5", src: ["group:fraud-eng"], dst: ["tag:payments-api"], ip: ["tcp:443"], note: "Fraud engineers can call payments-api in the browser, not open a shell on it." },
+      { id: "g3", src: ["group:breakglass"], dst: ["tag:payments-api", "tag:payments-db", "tag:fraud-dashboard"], ip: ["*"], app: true, note: "Break-glass can reach sensitive systems, including secure shell." },
+      { id: "g4", src: ["autogroup:member"], dst: ["autogroup:self"], app: true, note: "Members can open secure shell on their own devices." },
+    ];
+
+    const policyText = `{
+  "grants": [
+    {
+      "src": ["group:fraud-eng"],
+      "dst": ["tag:fraud-dashboard", "tag:staging-web"],
+      "ip":  ["tcp:443"]
+    },
+    {
+      "src": ["group:contractors"],
+      "dst": ["tag:staging-web"],
+      "ip":  ["tcp:443"]
+    },
+    {
+      "src": ["group:fraud-eng"],
+      "dst": ["tag:payments-api"],
+      "ip":  ["tcp:443"]
+    },
+    {
+      "src": ["group:breakglass"],
+      "dst": ["tag:payments-api", "tag:payments-db", "tag:fraud-dashboard"],
+      "ip":  ["*"],
+      "app": { "tailscale.com/cap/ssh": [{ "users": ["autogroup:nonroot"] }] }
+    },
+    {
+      "src": ["autogroup:member"],
+      "dst": ["autogroup:self"],
+      "app": { "tailscale.com/cap/ssh": [{ "users": ["autogroup:nonroot"] }] }
+    }
+  ]
+}`;
+
+    const events = [
+      { id: "e1", note: "Fraud engineer laptop joined the tailnet.", src: "fraud-eng", dst: "fraud-dash", act: "https" },
+      { id: "e2", note: "Same fraud engineer device requested a path to payments-db.", src: "fraud-eng", dst: "pay-db", act: "ssh" },
+      { id: "e3", note: "Vendor contractor device joined the tailnet.", src: "contractor", dst: "staging", act: "https" },
+      { id: "e4", note: "Same contractor device requested a path to payments-api.", src: "contractor", dst: "pay-api", act: "https" },
+      { id: "e5", note: "Your MacBook joined the tailnet.", src: "laptop", dst: "macbook", act: "ssh" },
+      { id: "e6", note: "Break-glass account joined the tailnet.", src: "breakglass", dst: "pay-db", act: "ssh" },
+    ];
+
+    function srcOk(list, sourceId) {
+      const s = sources.find((x) => x.id === sourceId);
+      return list.includes(s.src) || (list.includes("autogroup:member") && sourceId === "laptop");
+    }
+    function dstOk(list, destId, sourceId) {
+      const d = destinations.find((x) => x.id === destId);
+      return list.includes(d.dst) || (list.includes("autogroup:self") && destId === "macbook" && sourceId === "laptop");
+    }
+    function actOk(g, actionId) {
+      if (actionId === "ssh") return !!g.app;
+      if (!g.ip) return false;
+      if (g.ip.includes("*")) return true;
+      return g.ip.includes(actions.find((a) => a.id === actionId).port);
+    }
+
+    function analyze(srcId, dstId, actId) {
+      const steps = [];
+      const near = [];
+      let hit = null;
+
+      steps.push({
+        kind: "check",
+        title: "Build the request",
+        body: `${sources.find(s=>s.id===srcId).src} → ${destinations.find(d=>d.id===dstId).dst} · ${actions.find(a=>a.id===actId).port}`,
+      });
+
+      for (const g of grants) {
+        const s = srcOk(g.src, srcId);
+        const d = dstOk(g.dst, dstId, srcId);
+        const a = actOk(g, actId);
+        if (s && d && a) {
+          hit = g;
+          steps.push({ kind: "hit", title: `Matched ${g.id}`, body: g.note, code: JSON.stringify({ src: g.src, dst: g.dst, ip: g.ip, app: g.app ? "secure-shell" : undefined }, null, 2) });
+          break;
+        }
+
+        const reasons = [];
+        if (!s) reasons.push("person did not match");
+        if (!d) reasons.push("destination did not match");
+        if (!a) reasons.push(actId === "ssh" ? "secure shell not granted on this rule" : "port or action did not match");
+
+        const almost = (s && d && !a) || (s && a && !d) || (d && a && !s);
+        if (almost) {
+          near.push({ grant: g, reasons });
+          steps.push({ kind: "near", title: `Near miss · ${g.id}`, body: `${g.note} Failed because ${reasons.join(", ")}.`, code: null });
+        } else {
+          steps.push({ kind: "miss", title: `Checked ${g.id}`, body: `${g.note} Skipped, ${reasons.join(", ")}.`, code: null });
+        }
+      }
+
+      if (!hit) {
+        steps.push({
+          kind: "miss",
+          title: "Default no",
+          body: "Nothing matched. The path stays closed. This is the sentence an admin wants before a failed secure shell attempt turns into a ticket.",
+          code: null,
+        });
+      }
+
+      let fix = null;
+      if (!hit && near.length) {
+        const n = near[0];
+        if (n.reasons.includes("secure shell not granted on this rule")) {
+          fix = `Keep browser access on ${n.grant.id}, and do not add secure shell unless this person truly needs a terminal. If they only need the dashboard, the deny is correct.`;
+        } else if (n.reasons.includes("destination did not match")) {
+          fix = `If this person should reach that machine, extend a rule destination carefully, or create a narrower new rule instead of widening ${n.grant.id}.`;
+        } else {
+          fix = `The closest rule was ${n.grant.id}. Adjust only the failing piece (${n.reasons.join(", ")}) instead of opening everything.`;
+        }
+      } else if (hit) {
+        fix = `Allowed by ${hit.id}. If this feels too open, narrow destination or remove secure shell from that rule.`;
+      } else {
+        fix = "No nearby rule. Add the smallest grant that covers only this person, destination, and action.";
+      }
+
+      let afterToday = hit
+        ? "Today, an admin might only learn this after a successful session and a log review."
+        : "Today, the person often discovers the deny by failing to connect, then someone reads the whole rule file by hand.";
+
+      return { hit, steps, near, fix, afterToday };
+    }
+
+    const resultsLog = [];
+    let queueIndex = 0;
+    let playing = false;
+    let timer = null;
+
+    function renderDecision(idx) {
+      const entry = resultsLog[idx];
+      if (!entry) return;
+      const { ev, result, time } = entry;
+      const s = sources.find((x) => x.id === ev.src);
+      const d = destinations.find((x) => x.id === ev.dst);
+      const a = actions.find((x) => x.id === ev.act);
+
+      const box = document.getElementById("verdict");
+      box.className = `verdict ${result.hit ? "allow" : "deny"}`;
+      box.innerHTML = `
+        <div class="status">${result.hit ? "allow" : "deny"}</div>
+        <p class="big">${result.hit ? "Path open" : "Path closed"}</p>
+        <div class="pathline">${s.src} → ${d.dst} · ${a.port}</div>
+        <p class="blurb">${
+          result.hit
+            ? `Opened by ${result.hit.id}. The useful part is not the green light, it is knowing exactly which rule did it, automatically.`
+            : `Closed by default. The useful part is the near miss list, generated on its own, so you fix the right rule instead of guessing.`
+        }</p>
+      `;
+
+      const steps = document.getElementById("steps");
+      steps.innerHTML = "";
+      result.steps.forEach((st, i) => {
+        const el = document.createElement("div");
+        el.className = `step ${st.kind === "hit" ? "hit" : st.kind === "near" ? "near" : "miss"}`;
+        el.style.animationDelay = `${0.05 + i * 0.07}s`;
+        el.innerHTML = `
+          <div class="t">${st.title}</div>
+          <div class="body">${st.body}</div>
+          ${st.code ? `<pre>${st.code}</pre>` : ""}
+        `;
+        steps.appendChild(el);
+      });
+
+      document.getElementById("side").innerHTML = `
+        <div class="mini">
+          <h4>What happens today</h4>
+          <p>${result.afterToday}</p>
+        </div>
+        <div class="mini">
+          <h4>Closest miss</h4>
+          <p>${
+            result.near.length
+              ? `${result.near[0].grant.id} almost matched. ${result.near[0].reasons.join("; ")}.`
+              : result.hit
+                ? "No miss, a rule matched cleanly."
+                : "No nearby rule. This path is fully outside current policy."
+          }</p>
+        </div>
+        <div class="mini">
+          <h4>Smallest next change</h4>
+          <p>${result.fix}</p>
+        </div>
+      `;
+      document.getElementById("clock").textContent = time.toLocaleTimeString([], { hour12: false });
+
+      document.querySelectorAll(".feed-item").forEach((btn) => {
+        btn.classList.toggle("selected", Number(btn.dataset.idx) === idx);
+      });
+    }
+
+    function addFeedItem(idx) {
+      const { ev, result, time } = resultsLog[idx];
+      const s = sources.find((x) => x.id === ev.src);
+      const d = destinations.find((x) => x.id === ev.dst);
+      const a = actions.find((x) => x.id === ev.act);
+      const feed = document.getElementById("feed");
+      const btn = document.createElement("button");
+      btn.className = `feed-item ${result.hit ? "open" : "blocked"}`;
+      btn.dataset.idx = idx;
+      btn.setAttribute("aria-pressed", "false");
+      btn.style.animationDelay = "0s";
+      btn.innerHTML = `
+        <div class="fline">${ev.note}</div>
+        <div class="fmeta">
+          <span>${time.toLocaleTimeString([], { hour12: false })}</span>
+          <span class="fbadge">${result.hit ? "open" : "blocked"}</span>
+          <span>${s.name} → ${d.name} · ${a.name}</span>
+        </div>
+      `;
+      btn.onclick = () => renderDecision(Number(btn.dataset.idx));
+      feed.prepend(btn);
+    }
+
+    function updatePlayBtn() {
+      const btn = document.getElementById("playBtn");
+      btn.textContent = playing ? "Pause" : "Resume";
+      btn.setAttribute("aria-pressed", String(playing));
+      document.getElementById("watchState").textContent = playing ? "watching" : "paused";
+    }
+
+    function advance() {
+      if (queueIndex >= events.length) {
+        pause();
+        const feed = document.getElementById("feed");
+        if (!feed.querySelector(".feed-empty")) {
+          const note = document.createElement("div");
+          note.className = "feed-empty";
+          note.textContent = `All ${events.length} sample devices traced for this session. Click Restart to run it again.`;
+          feed.prepend(note);
+        }
+        return;
+      }
+      const ev = events[queueIndex];
+      const result = analyze(ev.src, ev.dst, ev.act);
+      const idx = resultsLog.length;
+      resultsLog.push({ ev, result, time: new Date() });
+      addFeedItem(idx);
+      renderDecision(idx);
+      queueIndex++;
+    }
+
+    function play() {
+      if (playing) return;
+      playing = true;
+      updatePlayBtn();
+      advance();
+      timer = setInterval(advance, 3200);
+    }
+
+    function pause() {
+      playing = false;
+      clearInterval(timer);
+      updatePlayBtn();
+    }
+
+    document.getElementById("playBtn").onclick = () => (playing ? pause() : play());
+    document.getElementById("restartBtn").onclick = () => {
+      pause();
+      queueIndex = 0;
+      resultsLog.length = 0;
+      document.getElementById("feed").innerHTML = "";
+      play();
+    };
+
+    document.getElementById("policyView").textContent = policyText;
+    play();
+  </script>
+</body>
+</html>
